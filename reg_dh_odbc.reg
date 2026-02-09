@@ -1,0 +1,12 @@
+Windows Registry Editor Version 5.00
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\ODBC\ODBCINST.INI\ODBC Drivers]
+"Deephaven Flight SQL ODBC Driver"="Installed"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\ODBC\ODBCINST.INI\Deephaven Flight SQL ODBC Driver]
+"Driver"="C:\\flight_sql_odbc_install\\bin\\arrow_flight_sql_odbc.dll"
+"Setup"="C:\\flight_sql_odbc_install\\bin\\arrow_flight_sql_odbc.dll"
+"DriverODBCVer"="03.80"
+"Description"="Deephaven Flight SQL ODBC Driver"
+"APILevel"="1"
+"UsageCount"=dword:00000001
