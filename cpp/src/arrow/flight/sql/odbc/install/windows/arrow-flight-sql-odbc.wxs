@@ -21,14 +21,16 @@
   <Fragment>
   <DirectoryRef Id="TARGETDIR">
       <Component Id="ODBCRegistryEntries" Guid="C348B9F7-5E8D-415D-A001-D92F2D4EA013">
-          <RegistryValue Root='HKLM' Key='Software\ODBC\ODBCINST.INI\ODBC Drivers' Name='Apache Arrow Flight SQL ODBC Driver' Type='string' Value='Installed'/>
+          <RegistryValue Root='HKLM' Key='Software\ODBC\ODBCINST.INI\ODBC Drivers' Name='Deephaven Enterprise Flight SQL' Type='string' Value='Installed'/>
 
           <RegistryKey Root="HKLM"
-                      Key="Software\ODBC\ODBCINST.INI\Apache Arrow Flight SQL ODBC Driver">
-                <!-- CM_FP_arrow_flight_sql_odbc.bin.arrow_flight_sql_odbc.dll is a generated variable value from build\_CPack_Packages\win64\WIX\files.wxs -->
+                      Key="Software\ODBC\ODBCINST.INI\Deephaven Enterprise Flight SQL">
+                <!-- CPack generates File ID pattern: CM_FP_<component>.bin.<dll>
+                     Using RUNTIME_DEPENDENCIES in install() command makes CPack use path-based IDs.
+                     The [#FileId] syntax resolves to the installed file path at runtime. -->
                 <RegistryValue Type="string" Name="DriverODBCVer" Value="03.00"/>
-                <RegistryValue Type="string" Name="Driver" Value="[#CM_FP_arrow_flight_sql_odbc.bin.arrow_flight_sql_odbc.dll]"/>
-                <RegistryValue Type="string" Name="Setup" Value="[#CM_FP_arrow_flight_sql_odbc.bin.arrow_flight_sql_odbc.dll]"/>
+                <RegistryValue Type="string" Name="Driver" Value="[#CM_FP_deephaven_flight_sql_odbc.bin.deephaven_flight_sql_odbc.dll]"/>
+                <RegistryValue Type="string" Name="Setup" Value="[#CM_FP_deephaven_flight_sql_odbc.bin.deephaven_flight_sql_odbc.dll]"/>
                 <RegistryValue Type="integer" Name="UsageCount" Value="1"/>
           </RegistryKey>
       </Component>

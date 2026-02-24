@@ -50,7 +50,7 @@ add_arrow_test(flight_sql_odbc_test
                arrow_odbc_spi_impl)
 
 find_package(ODBC REQUIRED)
-target_link_libraries(arrow-flight-sql-odbc-test PRIVATE ODBC::ODBC)
+#target_link_libraries(arrow-flight-sql-odbc-test PRIVATE ODBC::ODBC)
 
 # Disable unity build due to sqlite_sql_info.cc conflict with sql.h and sqlext.h headers.
 # set_target_properties(arrow-flight-sql-odbc-test PROPERTIES UNITY_BUILD OFF)

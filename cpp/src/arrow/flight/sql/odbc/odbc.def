@@ -15,7 +15,7 @@
 ; specific language governing permissions and limitations
 ; under the License.
 
-LIBRARY   arrow_flight_sql_odbc
+LIBRARY   deephaven_flight_sql_odbc
 EXPORTS
 	ConfigDSNW
 	SQLAllocConnect

@@ -22,7 +22,9 @@
 #include <optional>
 #include <vector>
 #include "arrow/flight/api.h"
+#include "arrow/flight/client.h"
 #include "arrow/flight/sql/api.h"
+#include "arrow/result.h"
 
 #include "arrow/flight/sql/odbc/odbc_impl/get_info_cache.h"
 #include "arrow/flight/sql/odbc/odbc_impl/types.h"
@@ -72,6 +74,9 @@ class FlightSqlConnection : public Connection {
   static constexpr std::string_view STRING_COLUMN_LENGTH = "StringColumnLength";
   static constexpr std::string_view USE_WIDE_CHAR = "UseWideChar";
   static constexpr std::string_view CHUNK_BUFFER_CAPACITY = "ChunkBufferCapacity";
+  // Deephaven Enterprise custom properties
+  static constexpr std::string_view PQNAME = "PQName";
+  static constexpr std::string_view PRIVATE_KEY_FILE = "PrivateKeyFile";
 
   explicit FlightSqlConnection(OdbcVersion odbc_version,
                                const std::string& driver_version = "0.9.0.0");
@@ -105,6 +110,29 @@ class FlightSqlConnection : public Connection {
   /// \brief Builds a FlightCallOptions used on gRPC calls.
   /// \note Visible for testing
   const FlightCallOptions& PopulateCallOptions(const ConnPropertyMap& properties);
+
+  /// \brief Creates a Deephaven-specific FlightClient with custom authentication
+  /// \note This method handles Deephaven Enterprise connection logic including:
+  ///       - Private key authentication
+  ///       - PQName (Persistent Query Name) handling
+  ///       - Custom connection protocol
+  /// \param host Server hostname or IP address
+  /// \param port Server port number
+  /// \param uid Username for authentication
+  /// \param pwd Password for authentication (optional if using private key)
+  /// \param private_key_file Path to private key file for authentication (optional)
+  /// \param pqname Persistent Query Name (optional)
+  /// \param ssl_config SSL/TLS configuration
+  /// \return Result containing connected FlightClient or error status
+  /// \note Visible for testing
+  static arrow::Result<std::unique_ptr<FlightClient>> CreateDeephavenFlightClient(
+      const std::string& host,
+      int port,
+      const std::string& uid,
+      const std::string& pwd,
+      const std::string& private_key_file,
+      const std::string& pqname,
+      const std::shared_ptr<FlightSqlSslConfig>& ssl_config);
 
   Diagnostics& GetDiagnostics() override;
 

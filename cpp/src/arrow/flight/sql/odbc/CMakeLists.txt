@@ -41,8 +41,8 @@ arrow_install_all_headers("arrow/flight/sql/odbc")
 set(ODBC_PACKAGE_VERSION_MAJOR "${arrow_VERSION_MAJOR}")
 set(ODBC_PACKAGE_VERSION_MINOR "${arrow_VERSION_MINOR}")
 set(ODBC_PACKAGE_VERSION_PATCH "${arrow_VERSION_PATCH}")
-set(ODBC_PACKAGE_NAME "Apache Arrow Flight SQL ODBC")
-set(ODBC_PACKAGE_VENDOR "Apache Software Foundation")
+set(ODBC_PACKAGE_NAME "Deephaven Enterprise Flight SQL ODBC")
+set(ODBC_PACKAGE_VENDOR "Deephaven Data Labs")
 
 set(ARROW_FLIGHT_SQL_ODBC_SRCS entry_points.cc odbc_api.cc)
 
@@ -61,7 +61,7 @@ if(WIN32)
   list(APPEND ARROW_FLIGHT_SQL_ODBC_SRCS odbc.def install/versioninfo.rc)
 endif()
 
-add_arrow_lib(arrow_flight_sql_odbc
+add_arrow_lib(deephaven_flight_sql_odbc
               CMAKE_PACKAGE_NAME
               ArrowFlightSqlOdbc
               PKG_CONFIG_NAME
@@ -109,28 +109,27 @@ if(ARROW_FLIGHT_SQL_ODBC_INSTALLER)
   # Make sure the MSI name contains only hyphens, not spaces
   string(REPLACE " " "-" CPACK_PACKAGE_NAME "${CPACK_PACKAGE_NAME}")
   set(CPACK_PACKAGE_VENDOR ${ODBC_PACKAGE_VENDOR})
-  set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Apache Arrow Flight SQL ODBC Driver")
-  set(CPACK_PACKAGE_CONTACT "dev@arrow.apache.org")
+  set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Deephaven Enterprise Flight SQL ODBC Driver")
+  set(CPACK_PACKAGE_CONTACT "support@deephaven.io")
 
   # GH-47876 TODO: set up `arrow_flight_sql_odbc` component for macOS Installer
   # GH-47877 TODO: set up `arrow_flight_sql_odbc` component for Linux Installer
   if(WIN32)
+    # Note: Library target and component name both use "deephaven_flight_sql_odbc"
+    # WiX adds "CM_C_" prefix to component names and has a 38-character limit for
+    # feature IDs. This name is used throughout to ensure CPack generates predictable
+    # File IDs matching Arrow's pattern.
+
     # Install ODBC and its Arrow dependencies
     install(PROGRAMS ${CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS}
             DESTINATION bin
-            COMPONENT arrow_flight_sql_odbc)
+            COMPONENT deephaven_flight_sql_odbc)
     install(TARGETS arrow_shared
                     arrow_compute_shared
                     arrow_flight_shared
                     arrow_flight_sql_shared
-                    arrow_flight_sql_odbc_shared
-                    RUNTIME_DEPENDENCIES
-                    PRE_EXCLUDE_REGEXES
-                    "api-ms-.*"
-                    "ext-ms-.*"
-                    POST_EXCLUDE_REGEXES
-                    ".*system32/.*\\.dll"
-            RUNTIME DESTINATION bin COMPONENT arrow_flight_sql_odbc)
+                    deephaven_flight_sql_odbc_shared
+            RUNTIME DESTINATION bin COMPONENT deephaven_flight_sql_odbc)
 
     set(CPACK_WIX_EXTRA_SOURCES
         "${CMAKE_CURRENT_SOURCE_DIR}/install/windows/arrow-flight-sql-odbc.wxs")
@@ -142,7 +141,7 @@ if(ARROW_FLIGHT_SQL_ODBC_INSTALLER)
   endif()
 
   get_cmake_property(CPACK_COMPONENTS_ALL COMPONENTS)
-  set(CPACK_COMPONENTS_ALL "arrow_flight_sql_odbc")
+  set(CPACK_COMPONENTS_ALL "deephaven_flight_sql_odbc")
 
   if(WIN32)
     # WiX msi installer on Windows
@@ -150,17 +149,22 @@ if(ARROW_FLIGHT_SQL_ODBC_INSTALLER)
     set(CPACK_GENERATOR "WIX")
     set(CPACK_WIX_VERSION 4)
 
-    # Upgrade GUID is required to be unchanged for ODBC installer to upgrade
-    set(CPACK_WIX_UPGRADE_GUID "DBF27A18-F8BF-423F-9E3A-957414D52C4B")
-    set(CPACK_WIX_PRODUCT_GUID "279D087B-93B5-4DC3-BA69-BCF485022A26")
+    # Set installation directory without version suffix so registry entries remain valid across upgrades
+    set(CPACK_PACKAGE_INSTALL_DIRECTORY "Deephaven Enterprise Flight SQL ODBC")
+
+    # Upgrade GUID must remain unchanged across versions to allow proper upgrades
+    # Product GUID should be unique for each product variant
+    # These GUIDs are different from Apache Arrow's to ensure Windows treats this as a separate product
+    set(CPACK_WIX_UPGRADE_GUID "A7C2E8F1-4D9B-4A3E-8F2C-1B5D7E9A3C6F")
+    set(CPACK_WIX_PRODUCT_GUID "3F8E1D4A-9C7B-4E2F-A1D8-6B3E9C5A2F7D")
   endif()
   # GH-47876 TODO: create macOS Installer using cpack
   # GH-47877 TODO: create Linux Installer using cpack
 
   # Load CPack after all CPACK* variables are set
   include(CPack)
-  cpack_add_component(arrow_flight_sql_odbc
-                      DISPLAY_NAME "ODBC library"
-                      DESCRIPTION "Apache Arrow Flight SQL ODBC library bin, required to install"
+  cpack_add_component(deephaven_flight_sql_odbc
+                      DISPLAY_NAME "Deephaven Enterprise Flight SQL ODBC Driver"
+                      DESCRIPTION "Deephaven Enterprise Flight SQL ODBC Driver library, required to install"
                       REQUIRED)
 endif()

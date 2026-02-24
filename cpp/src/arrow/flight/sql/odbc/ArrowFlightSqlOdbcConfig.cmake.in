@@ -21,8 +21,8 @@
 #
 # This config sets the following targets in your project::
 #
-#   ArrowFlightSqlOdbc::arrow_flight_sql_odbc_shared - for linked as shared library if shared library is built
-#   ArrowFlightSqlOdbc::arrow_flight_sql_odbc_static - for linked as static library if static library is built
+#   ArrowFlightSqlOdbc::deephaven_flight_sql_odbc_shared - for linked as shared library if shared library is built
+#   ArrowFlightSqlOdbc::deephaven_flight_sql_odbc_static - for linked as static library if static library is built
 
 @PACKAGE_INIT@
 
@@ -31,7 +31,7 @@ find_dependency(ArrowFlightSql)
 
 include("${CMAKE_CURRENT_LIST_DIR}/ArrowFlightSqlOdbcTargets.cmake")
 
-arrow_keep_backward_compatibility(ArrowFlightSqlOdbc arrow_flight_sql_odbc)
+arrow_keep_backward_compatibility(ArrowFlightSqlOdbc deephaven_flight_sql_odbc)
 
 check_required_components(ArrowFlightSqlOdbc)
 

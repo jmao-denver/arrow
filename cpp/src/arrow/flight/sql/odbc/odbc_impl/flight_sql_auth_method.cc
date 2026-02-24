@@ -23,9 +23,13 @@
 #include "arrow/flight/sql/odbc/odbc_impl/platform.h"
 #include "arrow/result.h"
 #include "arrow/status.h"
+#include "arrow/io/file.h"
+#include "arrow/io/api.h"
 
 #include <optional>
 #include <utility>
+#include <fstream>
+#include <sstream>
 
 namespace arrow::flight::sql::odbc {
 
@@ -137,13 +141,61 @@ class TokenAuthMethod : public FlightSqlAuthMethod {
     }
   }
 };
+
+// PrivateKeyAuthMethod: Uses Deephaven's custom connection method
+
+// PrivateKeyAuthMethod: Authenticates using a private key file
+// Uses Deephaven's custom connection method that handles authentication internally
+class PrivateKeyAuthMethod : public FlightSqlAuthMethod {
+ private:
+  std::string user_;
+
+ public:
+  PrivateKeyAuthMethod(FlightClient& client, std::string user,
+                       std::string private_key_file)
+      : user_(std::move(user)) {
+    // Note: The actual authentication is handled by the custom Deephaven connection method
+    // in FlightSqlConnection::Connect() before this auth method is even called.
+    // This class is kept for consistency with the auth method pattern, but does minimal work.
+  }
+
+  void Authenticate(FlightSqlConnection& connection,
+                    FlightCallOptions& call_options) override {
+    // No-op: Authentication was already handled by the custom Deephaven connection method
+    // that created the FlightClient with proper credentials
+  }
+
+  std::string GetUser() override { return user_; }
+};
 }  // namespace
 
 std::unique_ptr<FlightSqlAuthMethod> FlightSqlAuthMethod::FromProperties(
     const std::unique_ptr<FlightClient>& client,
     const Connection::ConnPropertyMap& properties) {
-  // Check if should use user-password authentication
+  // Check if should use private key authentication
+  auto it_private_key = properties.find(FlightSqlConnection::PRIVATE_KEY_FILE);
   auto it_user = properties.find(FlightSqlConnection::USER);
+
+  if (it_user == properties.end()) {
+    // Try alternative user property names
+    it_user = properties.find(FlightSqlConnection::USER_ID);
+  }
+  if (it_user == properties.end()) {
+    it_user = properties.find(FlightSqlConnection::UID);
+  }
+
+  // Private key auth takes priority if both user and private key file are provided
+  if (it_private_key != properties.end() && !it_private_key->second.empty() &&
+      it_user != properties.end() && !it_user->second.empty()) {
+    const std::string& user = it_user->second;
+    const std::string& private_key_file = it_private_key->second;
+
+    return std::unique_ptr<FlightSqlAuthMethod>(
+        new PrivateKeyAuthMethod(*client, user, private_key_file));
+  }
+
+  // Check if should use user-password authentication
+  it_user = properties.find(FlightSqlConnection::USER);
   if (it_user == properties.end()) {
     // The Microsoft OLE DB to ODBC bridge provider (MSDASQL) will write
     // "User ID" and "Password" properties instead of mapping

@@ -139,6 +139,10 @@ void Configuration::LoadDsn(const std::string& dsn) {
   Set(FlightSqlConnection::DISABLE_CERTIFICATE_VERIFICATION,
       ReadDsnString(dsn, FlightSqlConnection::DISABLE_CERTIFICATE_VERIFICATION,
                     DEFAULT_DISABLE_CERT_VERIFICATION));
+  // Deephaven Enterprise custom properties
+  Set(FlightSqlConnection::PQNAME, ReadDsnString(dsn, FlightSqlConnection::PQNAME));
+  Set(FlightSqlConnection::PRIVATE_KEY_FILE,
+      ReadDsnString(dsn, FlightSqlConnection::PRIVATE_KEY_FILE));
 
   auto customKeys = ReadAllKeys(dsn);
   RemoveAllKnownKeys(customKeys);

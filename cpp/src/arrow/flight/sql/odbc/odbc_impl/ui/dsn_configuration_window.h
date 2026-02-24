@@ -46,8 +46,11 @@ class DsnConfigurationWindow : public CustomWindow {
       USER_EDIT,
       PASSWORD_LABEL,
       PASSWORD_EDIT,
-      AUTH_TOKEN_LABEL,
-      AUTH_TOKEN_EDIT,
+      PQNAME_LABEL,
+      PQNAME_EDIT,
+      PRIVATE_KEY_FILE_LABEL,
+      PRIVATE_KEY_FILE_EDIT,
+      PRIVATE_KEY_FILE_BROWSE_BUTTON,
       ENABLE_ENCRYPTION_LABEL,
       ENABLE_ENCRYPTION_CHECKBOX,
       CERTIFICATE_LABEL,
@@ -183,7 +186,14 @@ class DsnConfigurationWindow : public CustomWindow {
   /** Password edit. */
   std::unique_ptr<Window> password_edit_;
 
-  std::unique_ptr<Window> auth_token_edit_;
+  /** PQName edit (mandatory). */
+  std::unique_ptr<Window> pqname_edit_;
+
+  /** Private key file path edit. */
+  std::unique_ptr<Window> private_key_file_edit_;
+
+  /** Private key file browse button. */
+  std::unique_ptr<Window> private_key_file_browse_button_;
 
   std::unique_ptr<Window> enable_encryption_check_box_;
 

@@ -54,9 +54,9 @@ std::string TestConnection(const config::Configuration& config) {
 namespace config {
 
 DsnConfigurationWindow::DsnConfigurationWindow(Window* parent, Configuration& config)
-    : CustomWindow(parent, L"FlightConfigureDSN", L"Configure Apache Arrow Flight SQL"),
+    : CustomWindow(parent, L"DeephavenConfigureDSN", L"Configure Deephaven Enterprise Flight SQL ODBC"),
       width_(480),
-      height_(375),
+      height_(400),
       config_(config),
       accepted_(false),
       is_initialized_(false) {
@@ -184,13 +184,23 @@ int DsnConfigurationWindow::CreateAuthSettingsGroup(int pos_x, int pos_y, int si
 
   int row_pos = pos_y + 2 * INTERVAL;
 
+  // PQName field (mandatory for Deephaven Enterprise) - moved to first position
+  const auto& pqname = config_.Get(FlightSqlConnection::PQNAME);
+  CONVERT_WIDE_STR(const std::wstring wpqname, pqname);
+  labels_.push_back(CreateLabel(label_pos_x, row_pos, LABEL_WIDTH, ROW_HEIGHT,
+                                L"Persistent Query Name*:", ChildId::PQNAME_LABEL));
+  pqname_edit_ = CreateEdit(edit_pos_x, row_pos, edit_size_x, ROW_HEIGHT,
+                            wpqname.c_str(), ChildId::PQNAME_EDIT);
+
+  row_pos += INTERVAL + ROW_HEIGHT;
+
   labels_.push_back(CreateLabel(label_pos_x, row_pos, LABEL_WIDTH, ROW_HEIGHT,
                                 L"Authentication Type:", ChildId::AUTH_TYPE_LABEL));
   auth_type_combo_box_ =
       CreateComboBox(edit_pos_x, row_pos, edit_size_x, ROW_HEIGHT,
                      L"Authentication Type:", ChildId::AUTH_TYPE_COMBOBOX);
   auth_type_combo_box_->AddString(L"Basic Authentication");
-  auth_type_combo_box_->AddString(L"Token Authentication");
+  auth_type_combo_box_->AddString(L"Private Key Authentication");
 
   row_pos += INTERVAL + ROW_HEIGHT;
 
@@ -211,18 +221,29 @@ int DsnConfigurationWindow::CreateAuthSettingsGroup(int pos_x, int pos_y, int si
   password_edit_ = CreateEdit(edit_pos_x, row_pos, edit_size_x, ROW_HEIGHT, wpwd.c_str(),
                               ChildId::USER_EDIT, ES_PASSWORD);
 
+
   row_pos += INTERVAL + ROW_HEIGHT;
 
-  const auto& token = config_.Get(FlightSqlConnection::TOKEN);
-  CONVERT_WIDE_STR(const std::wstring wtoken, token);
+  // Private key file field with browse button
+  const auto& private_key_file = config_.Get(FlightSqlConnection::PRIVATE_KEY_FILE);
+  CONVERT_WIDE_STR(const std::wstring wprivate_key_file, private_key_file);
   labels_.push_back(CreateLabel(label_pos_x, row_pos, LABEL_WIDTH, ROW_HEIGHT,
-                                L"Authentication Token:", ChildId::AUTH_TOKEN_LABEL));
-  auth_token_edit_ = CreateEdit(edit_pos_x, row_pos, edit_size_x, ROW_HEIGHT,
-                                wtoken.c_str(), ChildId::AUTH_TOKEN_EDIT);
-  auth_token_edit_->SetEnabled(false);
+                                L"Private Key File:", ChildId::PRIVATE_KEY_FILE_LABEL));
+
+  const int browse_button_width = 30;
+  const int edit_with_button_size_x = edit_size_x - browse_button_width - INTERVAL;
+
+  private_key_file_edit_ = CreateEdit(edit_pos_x, row_pos, edit_with_button_size_x, ROW_HEIGHT,
+                                      wprivate_key_file.c_str(), ChildId::PRIVATE_KEY_FILE_EDIT);
+  private_key_file_edit_->SetEnabled(false);
+
+  private_key_file_browse_button_ = CreateButton(
+      edit_pos_x + edit_with_button_size_x + INTERVAL, row_pos,
+      browse_button_width, ROW_HEIGHT, L"...", ChildId::PRIVATE_KEY_FILE_BROWSE_BUTTON);
+  private_key_file_browse_button_->SetEnabled(false);
 
   // Ensure the right elements are selected.
-  auth_type_combo_box_->SetSelection(token.empty() ? 0 : 1);
+  auth_type_combo_box_->SetSelection(private_key_file.empty() ? 0 : 1);
   CheckAuthType();
 
   row_pos += INTERVAL + ROW_HEIGHT;
@@ -365,8 +386,10 @@ void DsnConfigurationWindow::SelectTab(int tab_index) {
   auth_type_combo_box_->SetVisible(COMMON_TAB == tab_index);
   user_edit_->SetVisible(COMMON_TAB == tab_index);
   password_edit_->SetVisible(COMMON_TAB == tab_index);
-  auth_token_edit_->SetVisible(COMMON_TAB == tab_index);
-  for (size_t i = 0; i < 7; ++i) {
+  pqname_edit_->SetVisible(COMMON_TAB == tab_index);
+  private_key_file_edit_->SetVisible(COMMON_TAB == tab_index);
+  private_key_file_browse_button_->SetVisible(COMMON_TAB == tab_index);
+  for (size_t i = 0; i < 8; ++i) {  // Common tab: 3 connection labels + 5 auth labels
     labels_[i]->SetVisible(COMMON_TAB == tab_index);
   }
 
@@ -380,7 +403,7 @@ void DsnConfigurationWindow::SelectTab(int tab_index) {
   property_list_->SetVisible(ADVANCED_TAB == tab_index);
   add_button_->SetVisible(ADVANCED_TAB == tab_index);
   delete_button_->SetVisible(ADVANCED_TAB == tab_index);
-  for (size_t i = 7; i < labels_.size(); ++i) {
+  for (size_t i = 8; i < labels_.size(); ++i) {  // Advanced tab: encryption labels start at index 8
     labels_[i]->SetVisible(ADVANCED_TAB == tab_index);
   }
 }
@@ -393,9 +416,14 @@ void DsnConfigurationWindow::CheckEnableOk() {
   bool enable_ok = !name_edit_->IsTextEmpty();
   enable_ok = enable_ok && !server_edit_->IsTextEmpty();
   enable_ok = enable_ok && !port_edit_->IsTextEmpty();
-  if (auth_token_edit_->IsEnabled()) {
-    enable_ok = enable_ok && !auth_token_edit_->IsTextEmpty();
+  enable_ok = enable_ok && !pqname_edit_->IsTextEmpty();  // PQName is mandatory
+
+  if (private_key_file_edit_->IsEnabled()) {
+    // Private key authentication: need user and private key file
+    enable_ok = enable_ok && !user_edit_->IsTextEmpty();
+    enable_ok = enable_ok && !private_key_file_edit_->IsTextEmpty();
   } else {
+    // Basic authentication: need user and password
     enable_ok = enable_ok && !user_edit_->IsTextEmpty();
     enable_ok = enable_ok && !password_edit_->IsTextEmpty();
   }
@@ -431,9 +459,15 @@ void DsnConfigurationWindow::SaveParameters(Configuration& target_config) {
     password_edit_->GetText(text);
     target_config.Set(FlightSqlConnection::PWD, text);
   } else {
-    auth_token_edit_->GetText(text);
-    target_config.Set(FlightSqlConnection::TOKEN, text);
+    user_edit_->GetText(text);
+    target_config.Set(FlightSqlConnection::UID, text);
+    private_key_file_edit_->GetText(text);
+    target_config.Set(FlightSqlConnection::PRIVATE_KEY_FILE, text);
   }
+
+  // PQName is mandatory for Deephaven Enterprise
+  pqname_edit_->GetText(text);
+  target_config.Set(FlightSqlConnection::PQNAME, text);
 
   if (enable_encryption_check_box_->IsChecked()) {
     target_config.Set(FlightSqlConnection::USE_ENCRYPTION, TRUE_STR);
@@ -461,10 +495,14 @@ void DsnConfigurationWindow::SaveParameters(Configuration& target_config) {
 }
 
 void DsnConfigurationWindow::CheckAuthType() {
-  const bool is_basic = COMMON_TAB == auth_type_combo_box_->GetSelection();
-  user_edit_->SetEnabled(is_basic);
+  const bool is_basic = 0 == auth_type_combo_box_->GetSelection();
+  // user_edit_ is always enabled as it's needed for both auth types
+  user_edit_->SetEnabled(true);
+  // Password is only enabled for basic auth
   password_edit_->SetEnabled(is_basic);
-  auth_token_edit_->SetEnabled(!is_basic);
+  // Private key is only enabled for private key auth
+  private_key_file_edit_->SetEnabled(!is_basic);
+  private_key_file_browse_button_->SetEnabled(!is_basic);
 }
 
 bool DsnConfigurationWindow::OnMessage(UINT msg, WPARAM wparam, LPARAM lparam) {
@@ -527,7 +565,8 @@ bool DsnConfigurationWindow::OnMessage(UINT msg, WPARAM wparam, LPARAM lparam) {
           break;
         }
 
-        case ChildId::AUTH_TOKEN_EDIT:
+        case ChildId::PQNAME_EDIT:
+        case ChildId::PRIVATE_KEY_FILE_EDIT:
         case ChildId::NAME_EDIT:
         case ChildId::PASSWORD_EDIT:
         case ChildId::PORT_EDIT:
@@ -535,6 +574,29 @@ bool DsnConfigurationWindow::OnMessage(UINT msg, WPARAM wparam, LPARAM lparam) {
         case ChildId::USER_EDIT: {
           if (HIWORD(wparam) == EN_CHANGE) {
             CheckEnableOk();
+          }
+          break;
+        }
+
+        case ChildId::PRIVATE_KEY_FILE_BROWSE_BUTTON: {
+          OPENFILENAME open_file_name;
+          wchar_t file_name[FILENAME_MAX];
+
+          ZeroMemory(&open_file_name, sizeof(open_file_name));
+          open_file_name.lStructSize = sizeof(open_file_name);
+          open_file_name.hwndOwner = GetHandle();
+          open_file_name.lpstrFile = file_name;
+          open_file_name.lpstrFile[0] = '\0';
+          open_file_name.nMaxFile = sizeof(file_name);
+          open_file_name.lpstrFilter = L"Private Key Files (*.pem;*.key)\0*.pem;*.key\0All Files (*.*)\0*.*\0";
+          open_file_name.nFilterIndex = 1;
+          open_file_name.lpstrFileTitle = NULL;
+          open_file_name.nMaxFileTitle = 0;
+          open_file_name.lpstrInitialDir = NULL;
+          open_file_name.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
+
+          if (GetOpenFileName(&open_file_name)) {
+            private_key_file_edit_->SetText(file_name);
           }
           break;
         }
