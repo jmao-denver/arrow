@@ -188,7 +188,7 @@ int DsnConfigurationWindow::CreateAuthSettingsGroup(int pos_x, int pos_y, int si
   const auto& pqname = config_.Get(FlightSqlConnection::PQNAME);
   CONVERT_WIDE_STR(const std::wstring wpqname, pqname);
   labels_.push_back(CreateLabel(label_pos_x, row_pos, LABEL_WIDTH, ROW_HEIGHT,
-                                L"Persistent Query Name*:", ChildId::PQNAME_LABEL));
+                                L"Persistent Query Name:", ChildId::PQNAME_LABEL));
   pqname_edit_ = CreateEdit(edit_pos_x, row_pos, edit_size_x, ROW_HEIGHT,
                             wpqname.c_str(), ChildId::PQNAME_EDIT);
 

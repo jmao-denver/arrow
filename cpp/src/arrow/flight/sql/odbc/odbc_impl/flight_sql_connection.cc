@@ -38,6 +38,14 @@
 
 #include "arrow/flight/sql/odbc/odbc_impl/system_trust_store.h"
 
+// Deephaven Enterprise includes
+#include "deephaven_enterprise/session/session_manager.h"
+#include "deephaven_enterprise/session/dnd_client.h"
+
+// Standard library includes for file I/O
+#include <fstream>
+#include <sstream>
+
 #ifndef NI_MAXHOST
 #  define NI_MAXHOST 1025
 #endif
@@ -160,8 +168,9 @@ void FlightSqlConnection::Connect(const ConnPropertyMap& properties,
     // Always use Deephaven Enterprise custom connection method
     std::unique_ptr<FlightClient> flight_client;
 
-    // Extract required parameters
-    Location location = BuildLocation(properties, missing_attr, flight_ssl_configs);
+    // Extract and validate required parameters for Deephaven connection
+    auto it_host = TrackMissingRequiredProperty(HOST, properties, missing_attr);
+    auto it_port = TrackMissingRequiredProperty(PORT, properties, missing_attr);
 
     auto it_user = properties.find(UID);
     if (it_user == properties.end()) {
@@ -172,28 +181,19 @@ void FlightSqlConnection::Connect(const ConnPropertyMap& properties,
       it_pwd = properties.find(PASSWORD);
     }
     auto it_private_key = properties.find(PRIVATE_KEY_FILE);
-    auto it_pqname = properties.find(PQNAME);
+    auto it_pqname = TrackMissingRequiredProperty(PQNAME, properties, missing_attr);
 
-    std::string uid = (it_user != properties.end()) ? it_user->second : "";
-    std::string pwd = (it_pwd != properties.end()) ? it_pwd->second : "";
-    std::string private_key_file = (it_private_key != properties.end()) ? it_private_key->second : "";
-    std::string pqname = (it_pqname != properties.end()) ? it_pqname->second : "";
-
-    // Validate that PQName is mandatory (check before mutual exclusivity check)
-    if (pqname.empty()) {
-      missing_attr.push_back(PQNAME);
-    }
-
+    // Validate that PQName is mandatory (already tracked above)
     // Validate that basic auth and private key auth are mutually exclusive
-    bool has_basic_auth = !pwd.empty();
-    bool has_private_key_auth = !private_key_file.empty();
+    bool has_pwd = (it_pwd != properties.end() && !it_pwd->second.empty());
+    bool has_private_key = (it_private_key != properties.end() && !it_private_key->second.empty());
 
-    if (has_basic_auth && has_private_key_auth) {
+    if (has_pwd && has_private_key) {
       throw DriverException("Cannot use both password and private key authentication. "
                           "Please provide either password or private key file, not both.");
     }
 
-    // If there are missing attributes, throw exception early (similar to BuildLocation)
+    // Check if we have missing required attributes before proceeding
     if (!missing_attr.empty()) {
       std::vector<std::string> missing_attr_string_vec(missing_attr.begin(),
                                                        missing_attr.end());
@@ -202,11 +202,13 @@ void FlightSqlConnection::Connect(const ConnPropertyMap& properties,
       throw DriverException(missing_attr_str);
     }
 
-    // Extract host and port from properties directly
-    auto it_host = properties.find(HOST);
-    auto it_port = properties.find(PORT);
-    std::string host = (it_host != properties.end()) ? it_host->second : "";
-    int port = (it_port != properties.end()) ? std::stoi(it_port->second) : 0;
+    // Extract values (we know they exist because BuildLocation validated them)
+    std::string host = it_host->second;
+    int port = boost::lexical_cast<int>(it_port->second);
+    std::string uid = (it_user != properties.end()) ? it_user->second : "";
+    std::string pwd = (it_pwd != properties.end()) ? it_pwd->second : "";
+    std::string private_key_file = (it_private_key != properties.end()) ? it_private_key->second : "";
+    std::string pqname = it_pqname->second;
 
     // Call custom Deephaven connection method
     // This returns a FULLY AUTHENTICATED FlightClient - no additional auth needed
@@ -337,29 +339,62 @@ arrow::Result<std::unique_ptr<FlightClient>> FlightSqlConnection::CreateDeephave
     const std::string& pqname,
     const std::shared_ptr<FlightSqlSslConfig>& ssl_config) {
 
-  // TODO: Implement Deephaven Enterprise custom connection logic
-  // This method will:
-  // 1. Create a FlightClient with the provided connection parameters
-  // 2. Handle private key authentication if private_key_file is provided
-  // 3. Handle PQName (persistent query name) registration/setup
-  // 4. Return a fully authenticated and configured FlightClient
-  //
-  // Parameters available:
-  // - host: Server hostname/IP
-  // - port: Server port number
-  // - uid: Username for authentication
-  // - pwd: Password for authentication (may be empty if using private key)
-  // - private_key_file: Path to private key file (may be empty if using password)
-  // - pqname: Persistent query name (may be empty)
-  // - ssl_config: SSL/TLS configuration
-  //
-  // Expected return: Result<std::unique_ptr<FlightClient>>
+  // Construct the JSON URL for the Deephaven server
+  // Format: https://host:port/iris/connection.json
+    std::string protocol = "https"
+  std::string json_url = protocol + "://" + host + ":" + std::to_string(port) + "/iris/connection.json";
 
-  // PLACEHOLDER: For now, return error indicating not implemented
-  return Status::NotImplemented(
-      "CreateDeephavenFlightClient: Custom Deephaven connection logic not yet implemented. "
-      "This method should create and return a FlightClient with Deephaven-specific "
-      "authentication and configuration.");
+  // Create SessionManager with descriptive name
+  std::string descriptive_name = "Deephaven ODBC Driver";
+  deephaven_enterprise::session::SessionManager session_manager;
+
+  try {
+    session_manager = deephaven_enterprise::session::SessionManager::FromUrl(
+        descriptive_name, json_url);
+  } catch (const std::exception& e) {
+    return Status::IOError("Failed to create SessionManager: " + std::string(e.what()));
+  }
+
+  // Authenticate based on authentication method
+  bool auth_result = false;
+
+  if (!private_key_file.empty()) {
+    // Private key authentication
+    try {
+      auth_result = session_manager.PrivateKeyAuthentication(private_key_file);
+    } catch (const std::exception& e) {
+      return Status::IOError("Private key authentication failed: " + std::string(e.what()));
+    }
+  } else {
+    // Password authentication
+    try {
+      auth_result = session_manager.PasswordAuthentication(uid, pwd, uid);
+    } catch (const std::exception& e) {
+      return Status::IOError("Password authentication failed: " + std::string(e.what()));
+    }
+  }
+
+  if (!auth_result) {
+    return Status::Unauthenticated("Authentication failed for user: " + uid);
+  }
+
+  // Create PQ config and connect
+  try {
+    deephaven_enterprise::session::DndClient dnd_client = session_manager.ConnectToPqByName(pqname, false);
+    // Get the DndTableHandleManager which contains the FlightClient
+    deephaven_enterprise::session::DndTableHandleManager table_manager = dnd_client.GetManager();
+
+    // Extract the FlightClient from the manager
+    // Note: CreateFlightWrapper().flight_client() returns a unique_ptr<FlightClient>
+    std::unique_ptr<arrow::flight::FlightClient> flight_client =
+        table_manager.CreateFlightWrapper().flight_client();
+
+    // Return the FlightClient by moving it
+    return std::move(flight_client);
+
+  } catch (const std::exception& e) {
+    return Status::IOError("Failed to connect to the PQ: " + std::string(e.what()));
+  }
 }
 
 FlightClientOptions FlightSqlConnection::BuildFlightClientOptions(
