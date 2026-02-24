@@ -29,8 +29,8 @@
 
 namespace arrow::flight::sql::odbc {
 namespace config {
-static const char DEFAULT_DSN[] = "Apache Arrow Flight SQL";
-static const char DEFAULT_ENABLE_ENCRYPTION[] = TRUE_STR;
+static const char DEFAULT_DSN[] = "Deephaven Flight SQL";
+static const char DEFAULT_ENABLE_ENCRYPTION[] = FALSE_STR;
 static const char DEFAULT_USE_CERT_STORE[] = TRUE_STR;
 static const char DEFAULT_DISABLE_CERT_VERIFICATION[] = FALSE_STR;
 

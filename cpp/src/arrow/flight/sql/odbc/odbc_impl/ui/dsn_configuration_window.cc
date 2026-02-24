@@ -268,8 +268,8 @@ int DsnConfigurationWindow::CreateEncryptionSettingsGroup(int pos_x, int pos_y,
 
   std::string val = config_.Get(FlightSqlConnection::USE_ENCRYPTION);
 
-  // Enable encryption default value is true
-  const bool enable_encryption = util::AsBool(val).value_or(true);
+  // Enable encryption default value is false
+  const bool enable_encryption = util::AsBool(val).value_or(false);
   labels_.push_back(CreateLabel(label_pos_x, row_pos, LABEL_WIDTH, ROW_HEIGHT,
                                 L"Use Encryption:", ChildId::ENABLE_ENCRYPTION_LABEL));
   enable_encryption_check_box_ =
@@ -419,8 +419,7 @@ void DsnConfigurationWindow::CheckEnableOk() {
   enable_ok = enable_ok && !pqname_edit_->IsTextEmpty();  // PQName is mandatory
 
   if (private_key_file_edit_->IsEnabled()) {
-    // Private key authentication: need user and private key file
-    enable_ok = enable_ok && !user_edit_->IsTextEmpty();
+    // Private key authentication: only need private key file
     enable_ok = enable_ok && !private_key_file_edit_->IsTextEmpty();
   } else {
     // Basic authentication: need user and password
@@ -454,13 +453,13 @@ void DsnConfigurationWindow::SaveParameters(Configuration& target_config) {
   }
 
   if (0 == auth_type_combo_box_->GetSelection()) {
+    // Basic authentication: save user and password
     user_edit_->GetText(text);
     target_config.Set(FlightSqlConnection::UID, text);
     password_edit_->GetText(text);
     target_config.Set(FlightSqlConnection::PWD, text);
   } else {
-    user_edit_->GetText(text);
-    target_config.Set(FlightSqlConnection::UID, text);
+    // Private key authentication: only save private key file
     private_key_file_edit_->GetText(text);
     target_config.Set(FlightSqlConnection::PRIVATE_KEY_FILE, text);
   }
@@ -496,9 +495,8 @@ void DsnConfigurationWindow::SaveParameters(Configuration& target_config) {
 
 void DsnConfigurationWindow::CheckAuthType() {
   const bool is_basic = 0 == auth_type_combo_box_->GetSelection();
-  // user_edit_ is always enabled as it's needed for both auth types
-  user_edit_->SetEnabled(true);
-  // Password is only enabled for basic auth
+  // User and password are only enabled for basic auth
+  user_edit_->SetEnabled(is_basic);
   password_edit_->SetEnabled(is_basic);
   // Private key is only enabled for private key auth
   private_key_file_edit_->SetEnabled(!is_basic);
