@@ -139,9 +139,17 @@ else()
   find_package(ODBC REQUIRED)
   target_include_directories(arrow_odbc_spi_impl PUBLIC ${ODBC_INCLUDE_DIR})
   target_link_libraries(arrow_odbc_spi_impl
-                        PUBLIC arrow_flight_sql_shared arrow_compute_shared Boost::locale
+                        PUBLIC arrow_flight_sql_shared
+                               arrow_compute_shared
+                               Boost::locale
                                ${ODBCINST})
 endif()
+
+# Link Deephaven libraries on all platforms (include directories are propagated automatically)
+target_link_libraries(arrow_odbc_spi_impl
+                      PUBLIC deephaven::dhcore
+                             deephaven::dhclient
+                             deephaven_enterprise::dhe_client)
 
 set_target_properties(arrow_odbc_spi_impl
                       PROPERTIES ARCHIVE_OUTPUT_DIRECTORY

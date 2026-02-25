@@ -341,7 +341,7 @@ arrow::Result<std::unique_ptr<FlightClient>> FlightSqlConnection::CreateDeephave
 
   // Construct the JSON URL for the Deephaven server
   // Format: https://host:port/iris/connection.json
-    std::string protocol = "https"
+  std::string protocol = "https";
   std::string json_url = protocol + "://" + host + ":" + std::to_string(port) + "/iris/connection.json";
 
   // Create SessionManager with descriptive name
