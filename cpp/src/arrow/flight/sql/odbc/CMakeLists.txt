@@ -32,8 +32,8 @@ else()
 endif()
 
 # Find Deephaven libraries required for custom authentication and connection logic
-find_package(deephaven REQUIRED)
-find_package(deephaven_enterprise REQUIRED)
+find_package(deephaven CONFIG REQUIRED)
+find_package(deephaven_enterprise CONFIG REQUIRED)
 
 add_subdirectory(odbc_impl)
 add_subdirectory(tests)
