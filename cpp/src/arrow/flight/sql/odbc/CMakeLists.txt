@@ -31,7 +31,15 @@ else()
   set(ODBCINST odbcinst)
 endif()
 
-# Find Deephaven libraries required for custom authentication and connection logic
+# On Windows, deephaven libraries may only be built for Debug configuration.
+# Map all configurations to use Debug libraries to avoid IMPORTED_IMPLIB errors.
+# TODO remove when the deephaven libraries are available for Release and RelWithDebInfo configurations
+if(WIN32)
+  set(CMAKE_MAP_IMPORTED_CONFIG_MINSIZEREL Debug)
+  set(CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO Debug)
+  set(CMAKE_MAP_IMPORTED_CONFIG_RELEASE Debug)
+endif()
+
 find_package(deephaven CONFIG REQUIRED)
 find_package(deephaven_enterprise CONFIG REQUIRED)
 
