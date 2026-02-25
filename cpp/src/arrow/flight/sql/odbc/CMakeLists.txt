@@ -102,10 +102,6 @@ add_arrow_lib(deephaven_flight_sql_odbc
               arrow_odbc_spi_impl
               deephaven::dhcore
               deephaven::dhclient
-              deephaven_enterprise::dhe_client
-              STATIC_PRIVATE_LINK_LIBS
-              deephaven::dhcore
-              deephaven::dhclient
               deephaven_enterprise::dhe_client)
 
 foreach(LIB_TARGET ${ARROW_FLIGHT_SQL_ODBC_LIBRARIES})
