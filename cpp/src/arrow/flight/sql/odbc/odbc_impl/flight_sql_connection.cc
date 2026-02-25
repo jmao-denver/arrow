@@ -42,6 +42,7 @@
 #include "deephaven_enterprise/session/session_manager.h"
 #include "deephaven_enterprise/session/dnd_client.h"
 #include "deephaven/client/client.h"
+#include "deephaven/client/flight.h"
 
 // Standard library includes for file I/O
 #include <fstream>
@@ -377,12 +378,19 @@ arrow::Result<std::unique_ptr<FlightClient>> FlightSqlConnection::CreateDeephave
     // Get the DndTableHandleManager which wraps the FlightClient
     deephaven_enterprise::session::DndTableHandleManager table_manager = dnd_client.GetManager();
 
-    // Create a FlightWrapper and extract the FlightClient
-    // Note: We need to store the wrapper first to avoid calling methods on a temporary
-    deephaven::client::FlightWrapper wrapper = table_manager.CreateFlightWrapper();
-    std::unique_ptr<arrow::flight::FlightClient> flight_client = wrapper.flight_client();
+    // Create a FlightWrapper - NOTE: We leak this for now to avoid lifetime issues
+    // TODO: Implement proper resource cleanup
+    auto* wrapper = new deephaven::client::FlightWrapper(
+        table_manager.CreateFlightWrapper());
 
-    return flight_client;
+    // Get the raw FlightClient pointer from the wrapper
+    arrow::flight::FlightClient* raw_client = wrapper->FlightClient();
+
+    // Return a unique_ptr with the raw pointer
+    // NOTE: This unique_ptr does NOT own the FlightClient - it's owned by the leaked wrapper
+    // The wrapper and session_manager are intentionally leaked for now
+    // TODO: Implement proper resource cleanup/lifetime management
+    return std::unique_ptr<arrow::flight::FlightClient>(raw_client);
 
   } catch (const std::exception& e) {
     // Catch all exceptions from Deephaven operations (connection, network, unexpected errors)
