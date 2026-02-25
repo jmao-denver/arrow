@@ -41,6 +41,7 @@
 // Deephaven Enterprise includes
 #include "deephaven_enterprise/session/session_manager.h"
 #include "deephaven_enterprise/session/dnd_client.h"
+#include "deephaven/client/client.h"
 
 // Standard library includes for file I/O
 #include <fstream>
@@ -339,61 +340,53 @@ arrow::Result<std::unique_ptr<FlightClient>> FlightSqlConnection::CreateDeephave
     const std::string& pqname,
     const std::shared_ptr<FlightSqlSslConfig>& ssl_config) {
 
-  // Construct the JSON URL for the Deephaven server
-  // Format: https://host:port/iris/connection.json
-  std::string protocol = "https";
-  std::string json_url = protocol + "://" + host + ":" + std::to_string(port) + "/iris/connection.json";
-
-  // Create SessionManager with descriptive name
-  std::string descriptive_name = "Deephaven ODBC Driver";
-  deephaven_enterprise::session::SessionManager session_manager;
-
   try {
-    session_manager = deephaven_enterprise::session::SessionManager::FromUrl(
-        descriptive_name, json_url);
-  } catch (const std::exception& e) {
-    return Status::IOError("Failed to create SessionManager: " + std::string(e.what()));
-  }
+    // Construct the JSON URL for the Deephaven server
+    // Format: https://host:port/iris/connection.json
+    std::string protocol = "https";
+    std::string json_url = protocol + "://" + host + ":" + std::to_string(port) + "/iris/connection.json";
 
-  // Authenticate based on authentication method
-  bool auth_result = false;
+    // Create SessionManager with descriptive name
+    std::string descriptive_name = "Deephaven ODBC Driver";
 
-  if (!private_key_file.empty()) {
-    // Private key authentication
-    try {
+    // Create SessionManager directly from FromUrl (no default constructor available)
+    deephaven_enterprise::session::SessionManager session_manager =
+        deephaven_enterprise::session::SessionManager::FromUrl(descriptive_name, json_url);
+
+    // Authenticate based on authentication method
+    bool auth_result = false;
+
+    if (!private_key_file.empty()) {
+      // Private key authentication
       auth_result = session_manager.PrivateKeyAuthentication(private_key_file);
-    } catch (const std::exception& e) {
-      return Status::IOError("Private key authentication failed: " + std::string(e.what()));
-    }
-  } else {
-    // Password authentication
-    try {
+    } else if (!uid.empty() && !pwd.empty()) {
+      // Password authentication
       auth_result = session_manager.PasswordAuthentication(uid, pwd, uid);
-    } catch (const std::exception& e) {
-      return Status::IOError("Password authentication failed: " + std::string(e.what()));
+    } else {
+      return Status::Invalid("No valid authentication credentials provided");
     }
-  }
 
-  if (!auth_result) {
-    return Status::Unauthenticated("Authentication failed for user: " + uid);
-  }
+    if (!auth_result) {
+      return Status::Invalid("Authentication failed for user: " + uid);
+    }
 
-  // Create PQ config and connect
-  try {
-    deephaven_enterprise::session::DndClient dnd_client = session_manager.ConnectToPqByName(pqname, false);
-    // Get the DndTableHandleManager which contains the FlightClient
+    // Connect to PQ by name
+    deephaven_enterprise::session::DndClient dnd_client =
+        session_manager.ConnectToPqByName(pqname, false);
+
+    // Get the DndTableHandleManager which wraps the FlightClient
     deephaven_enterprise::session::DndTableHandleManager table_manager = dnd_client.GetManager();
 
-    // Extract the FlightClient from the manager
-    // Note: CreateFlightWrapper().flight_client() returns a unique_ptr<FlightClient>
-    std::unique_ptr<arrow::flight::FlightClient> flight_client =
-        table_manager.CreateFlightWrapper().flight_client();
+    // Create a FlightWrapper and extract the FlightClient
+    // Note: We need to store the wrapper first to avoid calling methods on a temporary
+    deephaven::client::FlightWrapper wrapper = table_manager.CreateFlightWrapper();
+    std::unique_ptr<arrow::flight::FlightClient> flight_client = wrapper.flight_client();
 
-    // Return the FlightClient by moving it
-    return std::move(flight_client);
+    return flight_client;
 
   } catch (const std::exception& e) {
-    return Status::IOError("Failed to connect to the PQ: " + std::string(e.what()));
+    // Catch all exceptions from Deephaven operations (connection, network, unexpected errors)
+    return Status::IOError("Failed to connect to Deephaven server: " + std::string(e.what()));
   }
 }
 
