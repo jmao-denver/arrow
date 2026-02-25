@@ -144,9 +144,12 @@ if(ARROW_FLIGHT_SQL_ODBC_INSTALLER)
                     arrow_flight_shared
                     arrow_flight_sql_shared
                     deephaven_flight_sql_odbc_shared
-                    deephaven::dhcore
-                    deephaven::dhclient
-                    deephaven_enterprise::dhe_client
+            RUNTIME_DEPENDENCIES
+            PRE_EXCLUDE_REGEXES
+            "api-ms-.*"
+            "ext-ms-.*"
+            POST_EXCLUDE_REGEXES
+            ".*system32/.*\\.dll"
             RUNTIME DESTINATION bin COMPONENT deephaven_flight_sql_odbc)
 
     set(CPACK_WIX_EXTRA_SOURCES
