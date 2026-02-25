@@ -129,7 +129,7 @@ if(ARROW_FLIGHT_SQL_ODBC_INSTALLER)
     # feature IDs. This name is used throughout to ensure CPack generates predictable
     # File IDs matching Arrow's pattern.
 
-    # Install ODBC and its Arrow and Deephaven dependencies
+    # Install ODBC and its Arrow dependencies
     install(PROGRAMS ${CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS}
             DESTINATION bin
             COMPONENT deephaven_flight_sql_odbc)
@@ -138,8 +138,6 @@ if(ARROW_FLIGHT_SQL_ODBC_INSTALLER)
                     arrow_flight_shared
                     arrow_flight_sql_shared
                     deephaven_flight_sql_odbc_shared
-                    deephaven::deephaven
-                    deephaven_enterprise::deephaven_enterprise
             RUNTIME DESTINATION bin COMPONENT deephaven_flight_sql_odbc)
 
     set(CPACK_WIX_EXTRA_SOURCES

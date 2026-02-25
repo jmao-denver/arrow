@@ -42,6 +42,7 @@
     },
     "grpc",
     "gtest",
+    "immer",
     "lz4",
     "openssl",
     "orc",
