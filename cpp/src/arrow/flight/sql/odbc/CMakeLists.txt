@@ -92,11 +92,13 @@ add_arrow_lib(deephaven_flight_sql_odbc
               ODBC::ODBC
               ${ODBCINST}
               arrow_odbc_spi_impl
-              deephaven::deephaven
-              deephaven_enterprise::deephaven_enterprise
+              deephaven::dhcore
+              deephaven::dhclient
+              deephaven_enterprise::dhe_client
               STATIC_PRIVATE_LINK_LIBS
-              deephaven::deephaven
-              deephaven_enterprise::deephaven_enterprise)
+              deephaven::dhcore
+              deephaven::dhclient
+              deephaven_enterprise::dhe_client)
 
 foreach(LIB_TARGET ${ARROW_FLIGHT_SQL_ODBC_LIBRARIES})
   target_compile_definitions(${LIB_TARGET} PRIVATE ARROW_FLIGHT_SQL_ODBC_EXPORTING)
