@@ -144,13 +144,32 @@ if(ARROW_FLIGHT_SQL_ODBC_INSTALLER)
                     arrow_flight_shared
                     arrow_flight_sql_shared
                     deephaven_flight_sql_odbc_shared
-            RUNTIME_DEPENDENCIES
-            PRE_EXCLUDE_REGEXES
-            "api-ms-.*"
-            "ext-ms-.*"
-            POST_EXCLUDE_REGEXES
-            ".*system32/.*\\.dll"
             RUNTIME DESTINATION bin COMPONENT deephaven_flight_sql_odbc)
+
+    # Manually install deephaven DLLs since vcpkg toolchain doesn't support RUNTIME_DEPENDENCIES
+    # Get the DLL locations from the imported targets
+    get_target_property(DHCORE_DLL deephaven::dhcore IMPORTED_LOCATION_DEBUG)
+    get_target_property(DHCLIENT_DLL deephaven::dhclient IMPORTED_LOCATION_DEBUG)
+    get_target_property(DHE_CLIENT_DLL deephaven_enterprise::dhe_client IMPORTED_LOCATION_DEBUG)
+
+    if(DHCORE_DLL)
+      install(FILES ${DHCORE_DLL}
+              DESTINATION bin
+              COMPONENT deephaven_flight_sql_odbc
+              CONFIGURATIONS Debug)
+    endif()
+    if(DHCLIENT_DLL)
+      install(FILES ${DHCLIENT_DLL}
+              DESTINATION bin
+              COMPONENT deephaven_flight_sql_odbc
+              CONFIGURATIONS Debug)
+    endif()
+    if(DHE_CLIENT_DLL)
+      install(FILES ${DHE_CLIENT_DLL}
+              DESTINATION bin
+              COMPONENT deephaven_flight_sql_odbc
+              CONFIGURATIONS Debug)
+    endif()
 
     set(CPACK_WIX_EXTRA_SOURCES
         "${CMAKE_CURRENT_SOURCE_DIR}/install/windows/arrow-flight-sql-odbc.wxs")
