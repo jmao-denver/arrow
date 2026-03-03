@@ -146,30 +146,51 @@ if(ARROW_FLIGHT_SQL_ODBC_INSTALLER)
                     deephaven_flight_sql_odbc_shared
             RUNTIME DESTINATION bin COMPONENT deephaven_flight_sql_odbc)
 
-    # Manually install deephaven DLLs since vcpkg toolchain doesn't support RUNTIME_DEPENDENCIES
-    # Get the DLL locations from the imported targets
-    get_target_property(DHCORE_DLL deephaven::dhcore IMPORTED_LOCATION_DEBUG)
-    get_target_property(DHCLIENT_DLL deephaven::dhclient IMPORTED_LOCATION_DEBUG)
-    get_target_property(DHE_CLIENT_DLL deephaven_enterprise::dhe_client IMPORTED_LOCATION_DEBUG)
+    # Find CURL package to get access to CURL::libcurl target
+    find_package(CURL REQUIRED)
 
-    if(DHCORE_DLL)
-      install(FILES ${DHCORE_DLL}
-              DESTINATION bin
-              COMPONENT deephaven_flight_sql_odbc
-              CONFIGURATIONS Debug)
-    endif()
-    if(DHCLIENT_DLL)
-      install(FILES ${DHCLIENT_DLL}
-              DESTINATION bin
-              COMPONENT deephaven_flight_sql_odbc
-              CONFIGURATIONS Debug)
-    endif()
-    if(DHE_CLIENT_DLL)
-      install(FILES ${DHE_CLIENT_DLL}
-              DESTINATION bin
-              COMPONENT deephaven_flight_sql_odbc
-              CONFIGURATIONS Debug)
-    endif()
+    # Manually install deephaven DLLs and their dependencies
+    # vcpkg's RUNTIME_DEPENDENCIES doesn't work with its own toolchain, so we install manually
+    foreach(CONFIG_TYPE Debug Release RelWithDebInfo MinSizeRel)
+      string(TOUPPER ${CONFIG_TYPE} CONFIG_TYPE_UPPER)
+
+      # Get deephaven DLL locations for this configuration
+      get_target_property(DHCORE_DLL deephaven::dhcore IMPORTED_LOCATION_${CONFIG_TYPE_UPPER})
+      get_target_property(DHCLIENT_DLL deephaven::dhclient IMPORTED_LOCATION_${CONFIG_TYPE_UPPER})
+      get_target_property(DHE_CLIENT_DLL deephaven_enterprise::dhe_client IMPORTED_LOCATION_${CONFIG_TYPE_UPPER})
+
+      # Install deephaven DLLs if they exist for this configuration
+      if(DHCORE_DLL AND EXISTS "${DHCORE_DLL}")
+        install(FILES ${DHCORE_DLL}
+                DESTINATION bin
+                COMPONENT deephaven_flight_sql_odbc
+                CONFIGURATIONS ${CONFIG_TYPE})
+      endif()
+      if(DHCLIENT_DLL AND EXISTS "${DHCLIENT_DLL}")
+        install(FILES ${DHCLIENT_DLL}
+                DESTINATION bin
+                COMPONENT deephaven_flight_sql_odbc
+                CONFIGURATIONS ${CONFIG_TYPE})
+      endif()
+      if(DHE_CLIENT_DLL AND EXISTS "${DHE_CLIENT_DLL}")
+        install(FILES ${DHE_CLIENT_DLL}
+                DESTINATION bin
+                COMPONENT deephaven_flight_sql_odbc
+                CONFIGURATIONS ${CONFIG_TYPE})
+      endif()
+
+      # Install curl.dll (transitive dependency of deephaven)
+      # Curl is in vcpkg but not auto-copied for external packages
+      if(TARGET CURL::libcurl)
+        get_target_property(CURL_DLL CURL::libcurl IMPORTED_LOCATION_${CONFIG_TYPE_UPPER})
+        if(CURL_DLL AND EXISTS "${CURL_DLL}")
+          install(FILES ${CURL_DLL}
+                  DESTINATION bin
+                  COMPONENT deephaven_flight_sql_odbc
+                  CONFIGURATIONS ${CONFIG_TYPE})
+        endif()
+      endif()
+    endforeach()
 
     set(CPACK_WIX_EXTRA_SOURCES
         "${CMAKE_CURRENT_SOURCE_DIR}/install/windows/arrow-flight-sql-odbc.wxs")
