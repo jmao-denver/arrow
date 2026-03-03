@@ -7,6 +7,7 @@ mkdir build
 cd build
 
 cmake .. -G "Visual Studio 17 2022" -A x64 `
+  -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
   -DVCPKG_TARGET_TRIPLET=x64-windows `
   -DARROW_DEPENDENCY_SOURCE=VCPKG `
   -DARROW_FLIGHT=ON `
