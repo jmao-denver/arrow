@@ -19,6 +19,7 @@
 
 #include "arrow/flight/sql/odbc/odbc_impl/spi/connection.h"
 
+#include <memory>
 #include <optional>
 #include <vector>
 #include "arrow/flight/api.h"
@@ -28,6 +29,16 @@
 
 #include "arrow/flight/sql/odbc/odbc_impl/get_info_cache.h"
 #include "arrow/flight/sql/odbc/odbc_impl/types.h"
+
+// Forward declarations for Deephaven types to avoid header dependencies
+namespace deephaven_enterprise::session {
+class SessionManager;
+class DndClient;
+}  // namespace deephaven_enterprise::session
+
+namespace deephaven::client {
+class FlightWrapper;
+}  // namespace deephaven::client
 
 namespace arrow::flight::sql::odbc {
 
@@ -51,6 +62,12 @@ class FlightSqlConnection : public Connection {
   Diagnostics diagnostics_;
   OdbcVersion odbc_version_;
   bool closed_;
+
+  // Deephaven Enterprise connection objects - stored to maintain proper lifetimes
+  // These objects form the ownership chain to the FlightClient and must outlive sql_client_
+  std::unique_ptr<deephaven_enterprise::session::SessionManager> session_manager_;
+  std::unique_ptr<deephaven_enterprise::session::DndClient> dnd_client_;
+  std::unique_ptr<deephaven::client::FlightWrapper> flight_wrapper_;
 
   void PopulateMetadataSettings(const Connection::ConnPropertyMap& conn_property_map);
 
@@ -123,16 +140,22 @@ class FlightSqlConnection : public Connection {
   /// \param private_key_file Path to private key file for authentication (optional)
   /// \param pqname Persistent Query Name (optional)
   /// \param ssl_config SSL/TLS configuration
-  /// \return Result containing connected FlightClient or error status
+  /// \param out_session_manager Output parameter to store SessionManager (for lifetime management)
+  /// \param out_dnd_client Output parameter to store DndClient (for lifetime management)
+  /// \param out_flight_wrapper Output parameter to store FlightWrapper (for lifetime management)
+  /// \return Result containing connected FlightClient as shared_ptr
   /// \note Visible for testing
-  static arrow::Result<std::unique_ptr<FlightClient>> CreateDeephavenFlightClient(
+  static arrow::Result<std::shared_ptr<FlightClient>> CreateDeephavenFlightClient(
       const std::string& host,
       int port,
       const std::string& uid,
       const std::string& pwd,
       const std::string& private_key_file,
       const std::string& pqname,
-      const std::shared_ptr<FlightSqlSslConfig>& ssl_config);
+      const std::shared_ptr<FlightSqlSslConfig>& ssl_config,
+      std::unique_ptr<deephaven_enterprise::session::SessionManager>& out_session_manager,
+      std::unique_ptr<deephaven_enterprise::session::DndClient>& out_dnd_client,
+      std::unique_ptr<deephaven::client::FlightWrapper>& out_flight_wrapper);
 
   Diagnostics& GetDiagnostics() override;
 

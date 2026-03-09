@@ -168,7 +168,7 @@ void FlightSqlConnection::Connect(const ConnPropertyMap& properties,
     auto flight_ssl_configs = LoadFlightSslConfigs(properties);
 
     // Always use Deephaven Enterprise custom connection method
-    std::unique_ptr<FlightClient> flight_client;
+    std::shared_ptr<FlightClient> flight_client;
 
     // Extract and validate required parameters for Deephaven connection
     auto it_host = TrackMissingRequiredProperty(HOST, properties, missing_attr);
@@ -214,8 +214,11 @@ void FlightSqlConnection::Connect(const ConnPropertyMap& properties,
 
     // Call custom Deephaven connection method
     // This returns a FULLY AUTHENTICATED FlightClient - no additional auth needed
+    // The SessionManager, DndClient, and FlightWrapper are stored in member variables
+    // to maintain proper object lifetimes for the duration of the connection
     auto result = CreateDeephavenFlightClient(
-        host, port, uid, pwd, private_key_file, pqname, flight_ssl_configs);
+        host, port, uid, pwd, private_key_file, pqname, flight_ssl_configs,
+        session_manager_, dnd_client_, flight_wrapper_);
     ThrowIfNotOK(result.status());
     flight_client = std::move(result).ValueOrDie();
 
@@ -332,14 +335,17 @@ const FlightCallOptions& FlightSqlConnection::PopulateCallOptions(
   return call_options_;
 }
 
-arrow::Result<std::unique_ptr<FlightClient>> FlightSqlConnection::CreateDeephavenFlightClient(
+arrow::Result<std::shared_ptr<FlightClient>> FlightSqlConnection::CreateDeephavenFlightClient(
     const std::string& host,
     int port,
     const std::string& uid,
     const std::string& pwd,
     const std::string& private_key_file,
     const std::string& pqname,
-    const std::shared_ptr<FlightSqlSslConfig>& ssl_config) {
+    const std::shared_ptr<FlightSqlSslConfig>& ssl_config,
+    std::unique_ptr<deephaven_enterprise::session::SessionManager>& out_session_manager,
+    std::unique_ptr<deephaven_enterprise::session::DndClient>& out_dnd_client,
+    std::unique_ptr<deephaven::client::FlightWrapper>& out_flight_wrapper) {
 
   try {
     // Construct the JSON URL for the Deephaven server
@@ -350,19 +356,20 @@ arrow::Result<std::unique_ptr<FlightClient>> FlightSqlConnection::CreateDeephave
     // Create SessionManager with descriptive name
     std::string descriptive_name = "Deephaven ODBC Driver";
 
-    // Create SessionManager directly from FromUrl (no default constructor available)
-    deephaven_enterprise::session::SessionManager session_manager =
-        deephaven_enterprise::session::SessionManager::FromUrl(descriptive_name, json_url);
+    // Create SessionManager - stored in out_session_manager for lifetime management
+    // This object must live as long as the connection
+    out_session_manager = std::make_unique<deephaven_enterprise::session::SessionManager>(
+        deephaven_enterprise::session::SessionManager::FromUrl(descriptive_name, json_url));
 
     // Authenticate based on authentication method
     bool auth_result = false;
 
     if (!private_key_file.empty()) {
       // Private key authentication
-      auth_result = session_manager.PrivateKeyAuthentication(private_key_file);
+      auth_result = out_session_manager->PrivateKeyAuthentication(private_key_file);
     } else if (!uid.empty() && !pwd.empty()) {
       // Password authentication
-      auth_result = session_manager.PasswordAuthentication(uid, pwd, uid);
+      auth_result = out_session_manager->PasswordAuthentication(uid, pwd, uid);
     } else {
       return Status::Invalid("No valid authentication credentials provided");
     }
@@ -371,26 +378,31 @@ arrow::Result<std::unique_ptr<FlightClient>> FlightSqlConnection::CreateDeephave
       return Status::Invalid("Authentication failed for user: " + uid);
     }
 
-    // Connect to PQ by name
-    deephaven_enterprise::session::DndClient dnd_client =
-        session_manager.ConnectToPqByName(pqname, false);
+    // Connect to PQ by name - stored in out_dnd_client for lifetime management
+    // This object must live as long as the connection
+    out_dnd_client = std::make_unique<deephaven_enterprise::session::DndClient>(
+        out_session_manager->ConnectToPqByName(pqname, false));
 
     // Get the DndTableHandleManager which wraps the FlightClient
-    deephaven_enterprise::session::DndTableHandleManager table_manager = dnd_client.GetManager();
+    deephaven_enterprise::session::DndTableHandleManager table_manager = out_dnd_client->GetManager();
 
-    // Create a FlightWrapper - NOTE: We leak this for now to avoid lifetime issues
-    // TODO: Implement proper resource cleanup
-    auto* wrapper = new deephaven::client::FlightWrapper(
+    // Create FlightWrapper - stored in out_flight_wrapper for lifetime management
+    // This object must live as long as the connection
+    out_flight_wrapper = std::make_unique<deephaven::client::FlightWrapper>(
         table_manager.CreateFlightWrapper());
 
     // Get the raw FlightClient pointer from the wrapper
-    arrow::flight::FlightClient* raw_client = wrapper->FlightClient();
+    // This is a non-owning pointer - the FlightWrapper owns the actual FlightClient
+    arrow::flight::FlightClient* raw_client = out_flight_wrapper->FlightClient();
 
-    // Return a unique_ptr with the raw pointer
-    // NOTE: This unique_ptr does NOT own the FlightClient - it's owned by the leaked wrapper
-    // The wrapper and session_manager are intentionally leaked for now
-    // TODO: Implement proper resource cleanup/lifetime management
-    return std::unique_ptr<arrow::flight::FlightClient>(raw_client);
+    // Return a shared_ptr that doesn't actually own the pointer
+    // The custom deleter is a no-op because the FlightWrapper (stored in out_flight_wrapper)
+    // owns the FlightClient and will clean it up when the connection is closed
+    auto no_op_deleter = [](arrow::flight::FlightClient*) {
+      // Do nothing - the FlightWrapper owns and manages the FlightClient lifetime
+    };
+
+    return std::shared_ptr<arrow::flight::FlightClient>(raw_client, no_op_deleter);
 
   } catch (const std::exception& e) {
     // Catch all exceptions from Deephaven operations (connection, network, unexpected errors)
@@ -479,7 +491,18 @@ void FlightSqlConnection::Close() {
     throw DriverException("Connection already closed.");
   }
 
+  // Clean up resources in reverse order of creation
+  // This ensures proper cleanup of the Deephaven object ownership chain:
+  // sql_client_ -> FlightClient (owned by flight_wrapper_) -> dnd_client_ -> session_manager_
+
+  // First, reset sql_client_ which uses the FlightClient
   sql_client_.reset();
+
+  // Then, clean up Deephaven objects in reverse order of creation
+  flight_wrapper_.reset();
+  dnd_client_.reset();
+  session_manager_.reset();
+
   closed_ = true;
   attribute_[CONNECTION_DEAD] = static_cast<uint32_t>(SQL_TRUE);
 }
