@@ -214,11 +214,11 @@ void FlightSqlConnection::Connect(const ConnPropertyMap& properties,
 
     // Call custom Deephaven connection method
     // This returns a FULLY AUTHENTICATED FlightClient - no additional auth needed
-    // The SessionManager, DndClient, and FlightWrapper are stored in member variables
+    // The SessionManager and DndClient are stored in member variables
     // to maintain proper object lifetimes for the duration of the connection
     auto result = CreateDeephavenFlightClient(
         host, port, uid, pwd, private_key_file, pqname, flight_ssl_configs,
-        session_manager_, dnd_client_, flight_wrapper_);
+        session_manager_, dnd_client_);
     ThrowIfNotOK(result.status());
     flight_client = std::move(result).ValueOrDie();
 
@@ -344,8 +344,7 @@ arrow::Result<std::shared_ptr<FlightClient>> FlightSqlConnection::CreateDeephave
     const std::string& pqname,
     const std::shared_ptr<FlightSqlSslConfig>& ssl_config,
     std::unique_ptr<deephaven_enterprise::session::SessionManager>& out_session_manager,
-    std::unique_ptr<deephaven_enterprise::session::DndClient>& out_dnd_client,
-    std::unique_ptr<deephaven::client::FlightWrapper>& out_flight_wrapper) {
+    std::unique_ptr<deephaven_enterprise::session::DndClient>& out_dnd_client) {
 
   try {
     // Construct the JSON URL for the Deephaven server
@@ -383,23 +382,18 @@ arrow::Result<std::shared_ptr<FlightClient>> FlightSqlConnection::CreateDeephave
     out_dnd_client = std::make_unique<deephaven_enterprise::session::DndClient>(
         out_session_manager->ConnectToPqByName(pqname, false));
 
-    // Get the DndTableHandleManager which wraps the FlightClient
+    // Get the DndTableHandleManager which provides access to the FlightClient
+    // We create a temporary FlightWrapper just to get the FlightClient pointer
+    // The FlightWrapper holds a shared_ptr to Server, but DndClient already holds one too
     deephaven_enterprise::session::DndTableHandleManager table_manager = out_dnd_client->GetManager();
-
-    // Create FlightWrapper - stored in out_flight_wrapper for lifetime management
-    // This object must live as long as the connection
-    out_flight_wrapper = std::make_unique<deephaven::client::FlightWrapper>(
-        table_manager.CreateFlightWrapper());
-
-    // Get the raw FlightClient pointer from the wrapper
-    // This is a non-owning pointer - the FlightWrapper owns the actual FlightClient
-    arrow::flight::FlightClient* raw_client = out_flight_wrapper->FlightClient();
+    deephaven::client::FlightWrapper temp_wrapper = table_manager.CreateFlightWrapper();
+    arrow::flight::FlightClient* raw_client = temp_wrapper.FlightClient();
 
     // Return a shared_ptr that doesn't actually own the pointer
-    // The custom deleter is a no-op because the FlightWrapper (stored in out_flight_wrapper)
+    // The custom deleter is a no-op because the Server (referenced by out_dnd_client)
     // owns the FlightClient and will clean it up when the connection is closed
     auto no_op_deleter = [](arrow::flight::FlightClient*) {
-      // Do nothing - the FlightWrapper owns and manages the FlightClient lifetime
+      // Do nothing - the Server (owned via DndClient) manages the FlightClient lifetime
     };
 
     return std::shared_ptr<arrow::flight::FlightClient>(raw_client, no_op_deleter);
@@ -493,15 +487,16 @@ void FlightSqlConnection::Close() {
 
   // Clean up resources in reverse order of creation
   // This ensures proper cleanup of the Deephaven object ownership chain:
-  // sql_client_ -> FlightClient (owned by flight_wrapper_) -> dnd_client_ -> session_manager_
+  // sql_client_ -> FlightClient (owned by Server) -> dnd_client_ -> session_manager_
+  // Both SessionManager and DndClient hold shared_ptr references to Server
+  // Server owns the unique_ptr<FlightClient>
 
   // First, reset sql_client_ which uses the FlightClient
   sql_client_.reset();
 
   // Then, clean up Deephaven objects in reverse order of creation
-  flight_wrapper_.reset();
-  dnd_client_.reset();
-  session_manager_.reset();
+  dnd_client_.reset();    // Releases shared_ptr reference to Server
+  session_manager_.reset(); // Releases shared_ptr reference to Server, Server may be destroyed here
 
   closed_ = true;
   attribute_[CONNECTION_DEAD] = static_cast<uint32_t>(SQL_TRUE);
@@ -566,6 +561,12 @@ FlightSqlConnection::FlightSqlConnection(OdbcVersion odbc_version,
   attribute_[CONNECTION_TIMEOUT] = static_cast<uint32_t>(0);
   attribute_[CURRENT_CATALOG] = "";
 }
+
+// Destructor defined here (not in header) to allow unique_ptr with forward-declared types
+// The unique_ptr members (session_manager_, dnd_client_, flight_wrapper_) need the
+// complete type definitions to properly call their destructors
+FlightSqlConnection::~FlightSqlConnection() = default;
+
 Diagnostics& FlightSqlConnection::GetDiagnostics() { return diagnostics_; }
 
 void FlightSqlConnection::SetClosed(bool is_closed) { closed_ = is_closed; }
