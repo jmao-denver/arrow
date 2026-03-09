@@ -503,8 +503,12 @@ void FlightSqlConnection::Close() {
 }
 
 std::shared_ptr<Statement> FlightSqlConnection::CreateStatement() {
+  // Pass empty FlightCallOptions - the Deephaven FlightClient has middleware that
+  // automatically adds authentication headers. Adding call_options_ would interfere
+  // with the middleware's operation.
+  FlightCallOptions empty_call_options;
   return std::shared_ptr<Statement>(new FlightSqlStatement(
-      diagnostics_, *sql_client_, client_options_, call_options_, metadata_settings_));
+      diagnostics_, *sql_client_, client_options_, empty_call_options, metadata_settings_));
 }
 
 bool FlightSqlConnection::SetAttribute(Connection::AttributeId attribute,
