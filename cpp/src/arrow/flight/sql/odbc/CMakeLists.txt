@@ -31,13 +31,12 @@ else()
   set(ODBCINST odbcinst)
 endif()
 
-# On Windows, deephaven libraries may only be built for Debug configuration.
-# Map all configurations to use Debug libraries to avoid IMPORTED_IMPLIB errors.
-# TODO remove when the deephaven libraries are available for Release and RelWithDebInfo configurations
+# Map RelWithDebInfo and MinSizeRel to Release for Deephaven libraries
+# This ensures that if these configurations are used, they will reliably use Release Deephaven DLLs
+# Must be set before find_package() to ensure the mapping is in effect when packages are loaded
 if(WIN32)
-  set(CMAKE_MAP_IMPORTED_CONFIG_MINSIZEREL Debug)
-  set(CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO Debug)
-  set(CMAKE_MAP_IMPORTED_CONFIG_RELEASE Debug)
+  set(CMAKE_MAP_IMPORTED_CONFIG_RELWITHDEBINFO Release)
+  set(CMAKE_MAP_IMPORTED_CONFIG_MINSIZEREL Release)
 endif()
 
 find_package(deephaven CONFIG REQUIRED)
